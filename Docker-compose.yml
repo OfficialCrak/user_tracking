@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  user_tracking:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    container_name: user_tracking_app
+    ports:
+      - "8000:8000"
+    networks:
+      - demo
+    volumes:
+      - ./user_tracking:/app/user_tracking:z
+      - ./static:/app/static:z
+    command: ["/app/entrypoint.sh"]
+    depends_on:
+      - db_user_tracking
+    links:
+      - db_user_tracking
+    environment:
+      - DJANGO_SETTINGS_MODULE=user_tracking.settings
+
+  db_user_tracking:
+    container_name: db_user_tracking
+    restart: always
+    image: postgres:15
+    networks:
+      - demo
+    ports:
+      - "5432:5432"
+    env_file:
+      - .env
+#    volumes:
+#      - ./db:/var/lib/postgresql/data
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  adminer:
+    container_name: adminer_user_tracking
+    image: adminer:4.8.1-standalone
+    restart: on-failure
+    networks:
+      - demo
+    ports:
+      - '8081:8080'
+    links:
+      - 'db_user_tracking'
+
+networks:
+  demo:
+    driver: bridge
+
+volumes:
+  db_data:
