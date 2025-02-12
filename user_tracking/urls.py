@@ -50,6 +50,7 @@ urlpatterns = [
     path('docs/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
 
     re_path(r'^tracking/', include('tracking.urls')),
+    path('api/traffic/', include('traffic.urls'))
 ]
 
 if settings.DEBUG:

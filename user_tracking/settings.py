@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.postgres',
 
     'tracking',
+    'traffic',
 
     'drf_yasg',
     'rest_framework',
@@ -73,6 +74,7 @@ REST_FRAMEWORK = {
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'tracking.middleware.VisitorTrackingMiddleware',
+    'traffic.middleware.TrafficTrackingMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',

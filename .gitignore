@@ -9,6 +9,10 @@ venv/
 env/
 static/
 
+**/migrations/
+**/migrations/*.py
+**/migrations/*.pyc
+
 .vscode/
 .idea/
 *.swp

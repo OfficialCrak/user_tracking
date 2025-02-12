@@ -4,6 +4,7 @@ echo "Waiting for db_user_tracking to be ready..."
 ./wait-for-it.sh db_user_tracking 5432 60
 
 echo "Run migrations..."
+python manage.py makemigrations --noinput
 python manage.py migrate --noinput
 
 echo "Collect static files..."
