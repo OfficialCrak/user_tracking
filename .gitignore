@@ -8,6 +8,7 @@ __pycache__/
 venv/
 env/
 static/
+!traffic/static/
 
 **/migrations/
 **/migrations/*.py

@@ -89,7 +89,10 @@ ROOT_URLCONF = 'user_tracking.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates']
+        'DIRS': [
+            BASE_DIR / 'templates',
+            BASE_DIR / 'user_tracking' / 'traffic' / 'templates',
+        ]
         ,
         'APP_DIRS': True,
         'OPTIONS': {
@@ -123,6 +126,8 @@ CORS_ALLOWED_ALL_ORIGINS = True
 CORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOW_CREDENTIALS = True
 CORS_URLS_REGEX = r'^/api/.*$'
+
+SESSION_COOKIE_AGE = 7200
 
 
 # Password validation
@@ -160,6 +165,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [
+    BASE_DIR / 'traffic' / 'static',
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field

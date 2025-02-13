@@ -1,14 +1,21 @@
+from django.contrib.auth import get_user_model
+from django.utils.timezone import now
 from rest_framework import generics
+from rest_framework.views import APIView
+
 from .models import TrafficStat
+from tracking.models import Visitor
 from .serializers import TrafficStatSerializer
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import Count
+from django.db.models import Count, Max
 from django.utils import timezone
 from django.db.models.functions import TruncDay, TruncMonth, TruncHour
-from datetime import datetime
+from datetime import datetime, timedelta
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+
+User = get_user_model()
 
 
 class DailyTrafficStats(generics.ListAPIView):
@@ -214,3 +221,116 @@ class YearlyTrafficStats(generics.ListAPIView):
 
         return Response(data, status=status.HTTP_200_OK)
 
+
+class ActivityTrackingView(generics.CreateAPIView):
+    queryset = TrafficStat.objects.all()
+    serializer_class = TrafficStatSerializer
+
+    def create(self, request, *args, **kwargs):
+        last_activity_time = request.data.get('last_activity_time')
+
+        if not last_activity_time:
+            return Response(
+                {"error": "Отсутствует время последней активности"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            last_activity_time = timezone.datetime.fromisoformat(last_activity_time)
+        except ValueError:
+            return Response(
+                {"error": "Неверный формат времени"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        session_id = request.session.session_key
+        if not session_id:
+            request.session.create()
+            session_id = request.session.session_key
+
+        TrafficStat.objects.create(
+            session_id=session_id,
+            event='activity',
+            created_at=last_activity_time,
+        )
+
+        return Response(
+            {"message": "Активность выполнена успешна"},
+            status=status.HTTP_201_CREATED
+        )
+
+
+# class ActiveUserView(generics.ListAPIView):
+#     serializer_class = TrafficStatSerializer
+#
+#     def get_queryset(self):
+#         two_hours_ago = now() - timedelta(hours=2)
+#
+#         active_users = (
+#             TrafficStat.objects.filter(created_at__gte=two_hours_ago).values('session_id').annotate(last_active=Max('created_at'))
+#         )
+#
+#         data = [
+#             {
+#                 'session_id': user['session_id'],
+#                 'last_active': user['last_active']
+#             }
+#             for user in active_users
+#         ]
+#
+#         return Response({"active_users": data}, status=status.HTTP_200_OK)
+
+class ActiveUsersView(APIView):
+    def get(self, request, *args, **kwargs):
+        thirty_minutes_ago = timezone.now() - timezone.timedelta(minutes=30)
+
+        active_sessions = (
+            TrafficStat.objects
+            .filter(created_at__gte=thirty_minutes_ago)
+            .values('session_id')
+            .annotate(last_active=Max('created_at'))
+        )
+
+        data = []
+        for session in active_sessions:
+            visitor = Visitor.objects.filter(session_key=session['session_id']).select_related('user').first()
+
+            if visitor and visitor.user:
+                user = visitor.user
+
+                time_on_site_seconds = visitor.time_on_site
+                hours = time_on_site_seconds // 3600
+                minutes = (time_on_site_seconds % 3600) // 60
+                seconds = time_on_site_seconds % 60
+                time_on_site = f"{hours:02}:{minutes:02}:{seconds:02}"
+
+                user_data = {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'is_staff': user.is_staff,
+                    'start_time': visitor.start_time,
+                    'time_on_site': time_on_site
+                }
+                user_data['start_time'] = timezone.localtime(visitor.start_time).strftime('%Y-%m-%dT%H:%M:%S.%f')
+            else:
+                user_data = {
+                    'id': None,
+                    'username': 'Guest',
+                    'email': None,
+                    'is_staff': False
+                }
+
+            last_active_time = timezone.localtime(session['last_active'])
+            if last_active_time < thirty_minutes_ago:
+                user_data['is_online'] = False
+            else:
+                user_data['is_online'] = True
+
+            data.append({
+                'session_id': session['session_id'],
+                'last_active': last_active_time.strftime('%Y-%m-%dT%H:%M:%S.%f'),
+                **user_data
+            })
+
+        return Response({'active_users': data}, status=status.HTTP_200_OK)
