@@ -1,8 +1,8 @@
+from collections import OrderedDict
 from django.contrib.auth import get_user_model
-from django.utils.timezone import now
 from rest_framework import generics
 from rest_framework.views import APIView
-
+from rest_framework.pagination import PageNumberPagination
 from .models import TrafficStat
 from tracking.models import Visitor
 from .serializers import TrafficStatSerializer
@@ -237,21 +237,34 @@ class ActivityTrackingView(generics.CreateAPIView):
 
         try:
             last_activity_time = timezone.datetime.fromisoformat(last_activity_time)
+            last_activity_time = timezone.make_aware(last_activity_time)
         except ValueError:
             return Response(
                 {"error": "Неверный формат времени"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        session_id = request.session.session_key
-        if not session_id:
+        if not request.session.session_key:
             request.session.create()
-            session_id = request.session.session_key
+
+        session_id = request.session.session_key
+
+        visitor, created = Visitor.objects.get_or_create(
+            session_key=session_id,
+            defaults={
+                "ip_address": request.META.get('REMOTE_ADDR'),
+                "user_agent": request.META.get("HTTP_USER_AGENT", ""),
+                "start_time": timezone.now(),
+            }
+        )
 
         TrafficStat.objects.create(
             session_id=session_id,
             event='activity',
             created_at=last_activity_time,
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            url=request.path
         )
 
         return Response(
@@ -259,26 +272,6 @@ class ActivityTrackingView(generics.CreateAPIView):
             status=status.HTTP_201_CREATED
         )
 
-
-# class ActiveUserView(generics.ListAPIView):
-#     serializer_class = TrafficStatSerializer
-#
-#     def get_queryset(self):
-#         two_hours_ago = now() - timedelta(hours=2)
-#
-#         active_users = (
-#             TrafficStat.objects.filter(created_at__gte=two_hours_ago).values('session_id').annotate(last_active=Max('created_at'))
-#         )
-#
-#         data = [
-#             {
-#                 'session_id': user['session_id'],
-#                 'last_active': user['last_active']
-#             }
-#             for user in active_users
-#         ]
-#
-#         return Response({"active_users": data}, status=status.HTTP_200_OK)
 
 class ActiveUsersView(APIView):
     def get(self, request, *args, **kwargs):
@@ -334,3 +327,134 @@ class ActiveUsersView(APIView):
             })
 
         return Response({'active_users': data}, status=status.HTTP_200_OK)
+
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 25
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class UserRequestLogView(generics.ListAPIView):
+    serializer_class = TrafficStatSerializer
+    pagination_class = StandardResultsSetPagination
+
+    @swagger_auto_schema(
+        manual_parameters=[
+            openapi.Parameter(
+                name='user_id',
+                in_=openapi.IN_QUERY,
+                description='ID пользователя (для авторизированных пользователей)',
+                type=openapi.TYPE_INTEGER,
+                required=False
+            ),
+            openapi.Parameter(
+                name='session_id',
+                in_=openapi.IN_QUERY,
+                description='Session id (для гостей)',
+                type=openapi.TYPE_STRING,
+                required=False
+            ),
+            openapi.Parameter(
+                name='start_date',
+                in_=openapi.IN_QUERY,
+                description='Начальная дата в формате YYYY-MM-DD:HH:MM:SS',
+                type=openapi.TYPE_STRING,
+                format=openapi.FORMAT_DATETIME,
+                required=False
+            ),
+            openapi.Parameter(
+                name='end_date',
+                in_=openapi.IN_QUERY,
+                description='Конечная дата в формате YYYY-MM-DDT:HH:MM:SS',
+                type=openapi.TYPE_STRING,
+                format=openapi.FORMAT_DATETIME,
+                required=False
+            ),
+            openapi.Parameter(
+                name='url',
+                in_=openapi.IN_QUERY,
+                description='Фильтрация по url',
+                type=openapi.TYPE_STRING,
+                required=False
+            ),
+        ]
+    )
+
+    def get(self, request, *args, **kwargs):
+        user_id = request.query_params.get('user_id')
+        session_id = request.query_params.get('session_id')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        url_filter = request.query_params.get("url")
+
+        if not user_id and not session_id:
+            return Response(
+                {"error": "Необходимо указать user_id (для пользователей) или session_id (для гостей"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        queryset = TrafficStat.objects.all()
+
+        if user_id:
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return Response(
+                    {"error": "Пользователь не найден"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            user_sessions = Visitor.objects.filter(user=user).values_list("session_key", flat=True)
+            queryset = TrafficStat.objects.filter(session_id__in=user_sessions).order_by('-created_at')
+
+        elif session_id:
+            queryset = queryset.filter(session_id=session_id).order_by('-created_at')
+
+        if start_date:
+            try:
+                start_date = timezone.datetime.fromisoformat(start_date)
+                start_date = timezone.make_aware(start_date)
+                queryset = queryset.filter(created_at__gte=start_date)
+            except ValueError:
+                return Response(
+                    {"error": "Некорректный формат start_date"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        if end_date:
+            try:
+                end_date = timezone.datetime.fromisoformat(end_date)
+                end_date = timezone.make_aware(end_date)
+
+                if start_date and end_date < start_date:
+                    return Response(
+                        {"error": "Конечная дата не может быть раньше начальной"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                queryset = queryset.filter(created_at__lte=end_date)
+            except ValueError:
+                return Response(
+                    {"error": "Некорректный формат end_date"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        if url_filter:
+            queryset = queryset.filter(url__icontains=url_filter)
+
+        paginator = self.pagination_class()
+        paginated_queryset = paginator.paginate_queryset(queryset, request)
+        serializer = TrafficStatSerializer(paginated_queryset, many=True)
+
+        total_pages = (paginator.page.paginator.count + paginator.page_size - 1) // paginator.page_size
+
+        response_data = OrderedDict([
+            ("count", paginator.page.paginator.count),
+            ("total_pages", total_pages),
+            ("next", paginator.get_next_link()),
+            ("previous", paginator.get_previous_link()),
+            ("results", serializer.data),
+        ])
+
+        return Response(response_data)

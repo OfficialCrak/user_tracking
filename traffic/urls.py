@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import DailyTrafficStats, WeeklyTrafficStats, MonthlyTrafficStats, YearlyTrafficStats, ActivityTrackingView, \
-    ActiveUsersView
+    ActiveUsersView, UserRequestLogView
 
 urlpatterns = [
     path('daily/', DailyTrafficStats.as_view(), name='daily-traffic-stats'),
@@ -9,4 +9,5 @@ urlpatterns = [
     path('yearly/', YearlyTrafficStats.as_view(), name='yearly-traffic-stats'),
     path('track-activity/', ActivityTrackingView.as_view(), name='track-activity'),
     path('active-users/', ActiveUsersView.as_view(), name='active-users'),
+    path('user-requests/', UserRequestLogView.as_view(), name='user-requests'),
 ]

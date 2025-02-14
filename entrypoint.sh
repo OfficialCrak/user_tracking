@@ -22,4 +22,4 @@ else:
 EOF
 
 echo "Starting Gunicorn..."
-exec gunicorn --bind 0.0.0.0:8000 user_tracking.wsgi:application
+exec gunicorn --workers=4 --bind 0.0.0.0:8000 user_tracking.wsgi:application
