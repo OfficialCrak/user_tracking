@@ -59,12 +59,13 @@ class DailyTrafficStats(generics.ListAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        unique_users_count = queryset.values('session_id').distinct().count()
-
-        data = {
-            'traffic': [{'hour': stat['hour'].hour, 'count': stat['count']} for stat in queryset],
-            'unique_users': unique_users_count,
-        }
+        data = []
+        for stat in queryset:
+            unique_users_count = TrafficStat.objects.filter(
+                created_at__hour=stat['hour'].hour,
+                created_at__date=selected_date
+            ).values('session_id').distinct().count()
+            data.append({'hour': stat['hour'].hour, 'count': stat['count'], 'unique_users': unique_users_count})
 
         return Response(data, status=status.HTTP_200_OK)
 
@@ -109,13 +110,12 @@ class WeeklyTrafficStats(generics.ListAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        unique_users_count = queryset.values('session_id').distinct().count()
-
-        data = {
-            'traffic': [{'day': stat['day'].strftime('%A'), 'count': stat['count']} for stat in queryset],
-            'unique_users': unique_users_count,
-        }
-
+        data = []
+        for stat in queryset:
+            unique_users_count = TrafficStat.objects.filter(
+                created_at__date=stat['day']
+            ).values('session_id').distinct().count()
+            data.append({'day': stat['day'].strftime('%A'), 'count': stat['count'], 'unique_users': unique_users_count})
         return Response(data, status=status.HTTP_200_OK)
 
 
@@ -161,12 +161,12 @@ class MonthlyTrafficStats(generics.ListAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        unique_users_count = queryset.values('session_id').distinct().count()
-
-        data = {
-            'traffic': [{'day': stat['day'].strftime('%d'), 'count': stat['count']} for stat in queryset],
-            'unique_users': unique_users_count,
-        }
+        data = []
+        for stat in queryset:
+            unique_users_count = TrafficStat.objects.filter(
+                created_at__date=stat['day']
+            ).values('session_id').distinct().count()
+            data.append({'day': stat['day'].strftime('%d'), 'count': stat['count'], 'unique_users': unique_users_count})
 
         return Response(data, status=status.HTTP_200_OK)
 
@@ -212,12 +212,13 @@ class YearlyTrafficStats(generics.ListAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        unique_users_count = queryset.values('session_id').distinct().count()
-
-        data = {
-            'traffic': [{'month': stat['month'].strftime('%B'), 'count': stat['count']} for stat in queryset],
-            'unique_users': unique_users_count,
-        }
+        data = []
+        for stat in queryset:
+            unique_users_count = TrafficStat.objects.filter(
+                created_at__month=stat['month'].month
+            ).values('session_id').distinct().count()
+            data.append(
+                {'month': stat['month'].strftime('%B'), 'count': stat['count'], 'unique_users': unique_users_count})
 
         return Response(data, status=status.HTTP_200_OK)
 
