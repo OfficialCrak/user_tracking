@@ -289,43 +289,47 @@ class ActiveUsersView(APIView):
         for session in active_sessions:
             visitor = Visitor.objects.filter(session_key=session['session_id']).select_related('user').first()
 
-            if visitor and visitor.user:
-                user = visitor.user
+            if visitor:
+                if visitor.session_ended() or visitor.session_expired():
+                    continue
 
-                time_on_site_seconds = visitor.time_on_site
-                hours = time_on_site_seconds // 3600
-                minutes = (time_on_site_seconds % 3600) // 60
-                seconds = time_on_site_seconds % 60
-                time_on_site = f"{hours:02}:{minutes:02}:{seconds:02}"
+                if visitor.user:
+                    user = visitor.user
 
-                user_data = {
-                    'id': user.id,
-                    'username': user.username,
-                    'email': user.email,
-                    'is_staff': user.is_staff,
-                    'start_time': visitor.start_time,
-                    'time_on_site': time_on_site
-                }
-                user_data['start_time'] = timezone.localtime(visitor.start_time).strftime('%Y-%m-%dT%H:%M:%S.%f')
-            else:
-                user_data = {
-                    'id': None,
-                    'username': 'Guest',
-                    'email': None,
-                    'is_staff': False
-                }
+                    time_on_site_seconds = visitor.time_on_site
+                    hours = time_on_site_seconds // 3600
+                    minutes = (time_on_site_seconds % 3600) // 60
+                    seconds = time_on_site_seconds % 60
+                    time_on_site = f"{hours:02}:{minutes:02}:{seconds:02}"
 
-            last_active_time = timezone.localtime(session['last_active'])
-            if last_active_time < thirty_minutes_ago:
-                user_data['is_online'] = False
-            else:
-                user_data['is_online'] = True
+                    user_data = {
+                        'id': user.id,
+                        'username': user.username,
+                        'email': user.email,
+                        'is_staff': user.is_staff,
+                        'start_time': visitor.start_time,
+                        'time_on_site': time_on_site
+                    }
+                    user_data['start_time'] = timezone.localtime(visitor.start_time).strftime('%Y-%m-%dT%H:%M:%S.%f')
+                else:
+                    user_data = {
+                        'id': None,
+                        'username': 'Guest',
+                        'email': None,
+                        'is_staff': False
+                    }
 
-            data.append({
-                'session_id': session['session_id'],
-                'last_active': last_active_time.strftime('%Y-%m-%dT%H:%M:%S.%f'),
-                **user_data
-            })
+                last_active_time = timezone.localtime(session['last_active'])
+                if last_active_time < thirty_minutes_ago:
+                    user_data['is_online'] = False
+                else:
+                    user_data['is_online'] = True
+
+                data.append({
+                    'session_id': session['session_id'],
+                    'last_active': last_active_time.strftime('%Y-%m-%dT%H:%M:%S.%f'),
+                    **user_data
+                })
 
         return Response({'active_users': data}, status=status.HTTP_200_OK)
 
@@ -381,7 +385,6 @@ class UserRequestLogView(generics.ListAPIView):
             ),
         ]
     )
-
     def get(self, request, *args, **kwargs):
         user_id = request.query_params.get('user_id')
         session_id = request.query_params.get('session_id')
