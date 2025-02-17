@@ -58,7 +58,7 @@ class DailyTrafficStats(generics.ListAPIView):
         if not queryset.exists():
             return Response(
                 {"error": f"Нет данных по дате {selected_date}"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_404_NOT_FOUND
             )
 
         data = []
@@ -118,7 +118,7 @@ class WeeklyTrafficStats(generics.ListAPIView):
         if not queryset.exists():
             return Response(
                 {"error": f"Нет данных для года {week_str}"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_404_NOT_FOUND
             )
 
         data = []
@@ -169,7 +169,7 @@ class MonthlyTrafficStats(generics.ListAPIView):
         if not queryset.exists():
             return Response(
                 {"error": f"Нет данных для месяца {month_str or selected_month.strftime('%Y-%m')}"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_404_NOT_FOUND
             )
 
         data = []
@@ -220,7 +220,7 @@ class YearlyTrafficStats(generics.ListAPIView):
         if not queryset.exists():
             return Response(
                 {"error": f"Нет данных для года {year_str or selected_year.year}"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_404_NOT_FOUND
             )
 
         data = []

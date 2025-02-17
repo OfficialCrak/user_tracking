@@ -5,3 +5,12 @@ body {
 h2 {
     color: #343a40;
 }
+
+#errorMessage {
+    color: white;
+    background-color: red;
+    padding: 10px;
+    border-radius: 5px;
+    text-align: center;
+    font-weight: bold;
+}

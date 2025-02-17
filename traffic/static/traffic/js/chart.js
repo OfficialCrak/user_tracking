@@ -4,6 +4,16 @@ document.addEventListener("DOMContentLoaded", function () {
     const periodSelect = document.getElementById("timePeriod");
     const dateInput = document.getElementById("dateInput");
     const showStatsBtn = document.getElementById("showStatsBtn");
+    const errorDiv = document.getElementById("errorMessage");
+
+    function showError(message) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = "block";
+    }
+
+    function hideError() {
+        errorDiv.style.display = "none";
+    }
 
     function getApiPathFromPeriod(period) {
         switch (period) {
@@ -26,22 +36,53 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
+    function validateDateInput(period, inputValue) {
+        const today = new Date();
+        const inputDate = new Date(inputValue);
+
+        if (isNaN(inputDate.getTime())) {
+            showError("Неверный формат даты. Используйте " + getDatePlaceholder(period));
+            return false;
+        }
+
+        if (inputDate > today) {
+            showError("Выбранная дата не может быть в будущем.");
+            return false;
+        }
+
+        hideError();
+        return true;
+    }
+
     function getDatePlaceholder(period) {
         switch (period){
-            case "daily": return "YYYY-MM-DD";
-            case "weekly": return "YYYY-WW";
-            case "monthly": return "YYYY-MM";
-            case "yearly": return "YYYY";
-            default: return "";
+            case "day": return "YYYY-MM-DD";
+            case "week": return "YYYY-WW";
+            case "month": return "YYYY-MM";
+            case "year": return "YYYY";
+            default: return "неизвестный формат";
         }
     }
 
     function fetchData(period, selectedDate = null) {
+        if (selectedDate && !validateDateInput(period, selectedDate)) {
+            return;
+        }
+
         const url = getApiUrl(period, selectedDate);
         fetch(url)
             .then(response => response.json())
-            .then(data => updateChart(data, period))
-            .catch(error => console.error("Ошибка загрузки данных: ", error));
+            .then(data => {
+                if (data.error) {
+                    showError(data.error);
+                    return;
+                }
+                hideError();
+                updateChart(data, period);
+            })
+            .catch(error => {
+                showError("Ошибка запроса: " + error.message);
+            });
     }
 
     function updateDateInput(period) {
@@ -80,7 +121,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function updateChart(data, period){
         if (data.error) {
-            console.error(data.error);
+            showError(data.error);
             return;
         }
 
@@ -140,7 +181,7 @@ document.addEventListener("DOMContentLoaded", function () {
             case "yearly":
                 return "Месяцы";
             default:
-                return "Время";
+                return "Часы";
         }
     }
 
