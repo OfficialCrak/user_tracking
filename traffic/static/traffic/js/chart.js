@@ -28,31 +28,77 @@ document.addEventListener("DOMContentLoaded", function () {
     function formatDate(period) {
         const today = new Date();
         switch (period) {
-            case "daily": return today.toISOString().split("T")[0];
-            case "weekly": return `${today.getFullYear()}-W${String(Math.ceil(today.getDate() / 7)).padStart(2, '0')}`;
-            case "monthly": return today.toISOString().slice(0, 7);
-            case "yearly": return today.getFullYear().toString();
+            case "day": return today.toISOString().split("T")[0];
+            case "week": {
+                const weekNumber = getISOWeek(today).week;
+                return `${today.getFullYear()}-${String(weekNumber).padStart(2, '0')}`;
+            }
+            case "month": return today.toISOString().slice(0, 7);
+            case "year": return today.getFullYear().toString();
             default: return "";
         }
     }
 
+    function getISOWeek(date = new Date()) {
+        const tempDate = new Date(date);
+        tempDate.setHours(0, 0, 0, 0);
+
+        tempDate.setDate(tempDate.getDate() + 3 - ((tempDate.getDay() + 6) % 7));
+
+        const firstThursday = new Date(tempDate.getFullYear(), 0, 4);
+        firstThursday.setDate(firstThursday.getDate() + 3 - ((firstThursday.getDay() + 6) % 7));
+        const weekNumber = Math.round((tempDate - firstThursday) / (7 * 24 * 60 * 60 * 1000)) + 1;
+
+        return { year: tempDate.getFullYear(), week: weekNumber };
+    }
+
+    function getFirstDayOfISOWeek(year, week) {
+        const simpleDate = new Date(year, 0, 1);
+        const days = (week - 1) * 7;
+        simpleDate.setDate(simpleDate.getDate() + days);
+
+        const day = simpleDate.getDay();
+        const offset = (day <= 1 ? day + 6 : day - 1);
+        simpleDate.setDate(simpleDate.getDate() - offset);
+
+        return simpleDate;
+    }
+
     function validateDateInput(period, inputValue) {
         const today = new Date();
-        const inputDate = new Date(inputValue);
 
-        if (isNaN(inputDate.getTime())) {
-            showError("Неверный формат даты. Используйте " + getDatePlaceholder(period));
-            return false;
-        }
+        if (period === "week") {
+            const match = inputValue.match(/^(\d{4})-(\d{1,2})$/);
+            if (!match) {
+                showError("Неверный формат недели. Используйте " + getDatePlaceholder(period));
+                return false;
+            }
 
-        if (inputDate > today) {
-            showError("Выбранная дата не может быть в будущем.");
-            return false;
+            const inputYear = parseInt(match[1], 10);
+            const inputWeek = parseInt(match[2], 10);
+
+            const firstDayOfWeek = getFirstDayOfISOWeek(inputYear, inputWeek);
+
+            if (firstDayOfWeek > today) {
+                showError("Выбранная неделя не может быть в будущем.");
+                return false;
+            }
+        } else {
+            const inputDate = new Date(inputValue);
+            if (isNaN(inputDate.getTime())) {
+                showError("Неверный формат даты. Используйте " + getDatePlaceholder(period));
+                return false;
+            }
+
+            if (inputDate > today) {
+                showError("Выбранная дата не может быть в будущем.");
+                return false;
+            }
         }
 
         hideError();
         return true;
-    }
+}
 
     function getDatePlaceholder(period) {
         switch (period){
@@ -87,9 +133,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function updateDateInput(period) {
         const placeholderText = getDatePlaceholder(period);
-        if (!dateInput.value) {
-            dateInput.setAttribute("placeholder", placeholderText);
-        }
+        dateInput.setAttribute("placeholder", placeholderText);
+
+        dateInput.value = formatDate(period);
     }
 
     function getApiUrl(period, selectedDate = "") {
@@ -181,7 +227,7 @@ document.addEventListener("DOMContentLoaded", function () {
             case "yearly":
                 return "Месяцы";
             default:
-                return "Часы";
+                return "Временной интервал";
         }
     }
 

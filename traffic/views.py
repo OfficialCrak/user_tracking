@@ -117,7 +117,7 @@ class WeeklyTrafficStats(generics.ListAPIView):
 
         if not queryset.exists():
             return Response(
-                {"error": f"Нет данных для года {week_str}"},
+                {"error": f"Нет данных для недели {week_str}"},
                 status=status.HTTP_404_NOT_FOUND
             )
 
