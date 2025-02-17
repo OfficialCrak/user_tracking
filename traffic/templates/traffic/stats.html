@@ -1,0 +1,39 @@
+{% extends "traffic/base.html" %}
+{% load static %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="text-center">Мониторинг активности пользователей</h2>
+
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <label for="timePeriod">Выберите период:</label>
+            <select class="form-control" id="timePeriod">
+                <option value="day">День</option>
+                <option value="week">Неделя</option>
+                <option value="month">Месяц</option>
+                <option value="year">Год</option>
+            </select>
+        </div>
+
+        <div class="col-md-3">
+            <label for="dateInput">Выберите дату:</label>
+            <input type="text" class="form-control" id="dateInput" placeholder="YYYY-MM-DD">
+        </div>
+
+        <div class="col-md-3">
+            <button type="button" class="btn btn-primary mt-4" id="showStatsBtn">Показать статистику</button>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <canvas id="trafficChart"></canvas>
+        </div>
+    </div>
+</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{% static 'traffic/js/chart.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,8 @@
+{% extends "traffic/base.html" %}
+{% block content %}
+<div class="text-center mt-5">
+    <h1>Статистика активности пользователей</h1>
+    <p class="lead">Анализируйте активность пользователей</p>
+    <a href="{% url 'stats' %}" class="btn btn-primary btn-lg">Перейти к статистике</a>
+</div>
+{% endblock %}

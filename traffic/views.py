@@ -1,5 +1,7 @@
 from collections import OrderedDict
 from django.contrib.auth import get_user_model
+from django.shortcuts import render
+from django.views.generic import TemplateView
 from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
@@ -11,7 +13,7 @@ from rest_framework import status
 from django.db.models import Count, Max
 from django.utils import timezone
 from django.db.models.functions import TruncDay, TruncMonth, TruncHour
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
@@ -91,22 +93,31 @@ class WeeklyTrafficStats(generics.ListAPIView):
         if week_str:
             try:
                 year, week = map(int, week_str.split('-'))
-                selected_date = datetime.strptime(f'{year}-W{week}-1', "%Y-W%W-%w").date()
-                start_of_week = timezone.make_aware(datetime.combine(selected_date, datetime.min.time()))
+                selected_date = date.fromisocalendar(year, week, 1)
+                start_of_week = timezone.make_aware(datetime.combine(selected_date, datetime.min.time()), timezone.get_current_timezone())
+
             except ValueError:
-                return TrafficStat.objects.none()
+                return Response(
+                    {"error": "Неверный формат недели. Используйте YYYY-WW"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         else:
-            now = timezone.now()
-            start_of_week = now - timezone.timedelta(days=now.weekday())
+            now = timezone.localtime(timezone.now())
+
+            iso_year, iso_week, iso_weekday = now.isocalendar()
+
+            start_of_week = now - timezone.timedelta(days=iso_weekday - 1)
+            start_of_week = timezone.make_aware(datetime.combine(start_of_week.date(), datetime.min.time()), timezone.get_current_timezone())
 
         end_of_week = start_of_week + timezone.timedelta(days=6, hours=23, minutes=59, seconds=59)
+        end_of_week = timezone.make_aware(datetime.combine(end_of_week.date(), datetime.max.time()), timezone.get_current_timezone())
 
         queryset = TrafficStat.objects.filter(created_at__range=(start_of_week, end_of_week))
         queryset = queryset.annotate(day=TruncDay('created_at')).values('day').annotate(count=Count('id')).order_by('day')
 
         if not queryset.exists():
             return Response(
-                {"error": "Неправильный формат даты или нету записи с такой датой"},
+                {"error": f"Нет данных для года {week_str}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -462,3 +473,11 @@ class UserRequestLogView(generics.ListAPIView):
         ])
 
         return Response(response_data)
+
+
+def index(request):
+    return render(request, 'traffic/index.html')
+
+
+class StatsView(TemplateView):
+    template_name = "traffic/stats.html"
