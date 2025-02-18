@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from django.contrib.auth import get_user_model
 from django.shortcuts import render
+from django.utils.timezone import now
 from django.views.generic import TemplateView
 from rest_framework import generics
 from rest_framework.views import APIView
@@ -476,7 +477,18 @@ class UserRequestLogView(generics.ListAPIView):
 
 
 def index(request):
-    return render(request, 'traffic/index.html')
+    end_date = now()
+    start_date = end_date - timedelta(days=7)
+
+    visitor_stats = Visitor.objects.stats(start_date, end_date)
+    user_stats = Visitor.objects.user_stats(start_date, end_date)
+
+    context = {
+        "visitor_stats": visitor_stats,
+        "user_stats": user_stats,
+    }
+
+    return render(request, 'traffic/index.html', context)
 
 
 class StatsView(TemplateView):

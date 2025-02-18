@@ -1,8 +1,82 @@
 {% extends "traffic/base.html" %}
 {% block content %}
-<div class="text-center mt-5">
-    <h1>Статистика активности пользователей</h1>
-    <p class="lead">Анализируйте активность пользователей</p>
-    <a href="{% url 'stats' %}" class="btn btn-primary btn-lg">Перейти к статистике</a>
+<div class="container mt-5">
+    <div class="text-center">
+        <h1>Статистика активности пользователей</h1>
+        <p class="lead">Анализируйте активность пользователей</p>
+        <a href="{% url 'stats' %}" class="btn btn-primary btn-lg mb-4">Перейти к статистике</a>
+    </div>
+
+    <!-- Статистика посетителей -->
+    <h2 class="text-center">Посетители</h2>
+    {% if visitor_stats.total %}
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th></th>
+                    <th>Всего</th>
+                    <th>Уникальные</th>
+                    <th>% Вернувшихся</th>
+                    <th>Среднее время на сайте</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th class="table-primary">Зарегистрированные</th>
+                    <td>{{ visitor_stats.registered.total }}</td>
+                    <td>{{ visitor_stats.registered.unique }}</td>
+                    <td>{{ visitor_stats.registered.return_ratio|floatformat }}%</td>
+                    <td>{{ visitor_stats.registered.time_on_site|default_if_none:"н/д" }}</td>
+                </tr>
+                {% if visitor_stats.guests %}
+                <tr>
+                    <th class="table-secondary">Гости</th>
+                    <td>{{ visitor_stats.guests.total }}</td>
+                    <td>{{ visitor_stats.guests.unique }}</td>
+                    <td>{{ visitor_stats.guests.return_ratio|floatformat }}%</td>
+                    <td>{{ visitor_stats.guests.time_on_site|default_if_none:"н/д" }}</td>
+                </tr>
+                <tr>
+                    <th class="table-success">Всего</th>
+                    <td>{{ visitor_stats.total }}</td>
+                    <td>{{ visitor_stats.unique }}</td>
+                    <td>{{ visitor_stats.return_ratio|floatformat }}%</td>
+                    <td>{{ visitor_stats.time_on_site|default_if_none:"н/д" }}</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-center text-muted">Нет данных о посетителях</p>
+    {% endif %}
+
+    <!-- Статистика зарегистрированных пользователей -->
+    <h2 class="text-center mt-4">Зарегистрированные пользователи</h2>
+    {% if user_stats %}
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>Пользователь</th>
+                    <th>Количество визитов</th>
+                    <th>Среднее время на сайте</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in user_stats %}
+                <tr>
+                    <th class="table-info">{% firstof user.get_full_name user %}</th>
+                    <td>{{ user.visit_count }}</td>
+                    <td>{{ user.time_on_site|default_if_none:"н/д" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-center text-muted">Нет данных о зарегистрированных пользователях</p>
+    {% endif %}
 </div>
 {% endblock %}
