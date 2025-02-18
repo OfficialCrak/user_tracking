@@ -11,7 +11,7 @@ from tracking.models import Visitor
 from .serializers import TrafficStatSerializer
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import Count, Max
+from django.db.models import Count, Max, F
 from django.utils import timezone
 from django.db.models.functions import TruncDay, TruncMonth, TruncHour
 from datetime import datetime, timedelta, date
@@ -64,11 +64,24 @@ class DailyTrafficStats(generics.ListAPIView):
 
         data = []
         for stat in queryset:
-            unique_users_count = TrafficStat.objects.filter(
+            unique_registered_users = TrafficStat.objects.filter(
                 created_at__hour=stat['hour'].hour,
-                created_at__date=selected_date
-            ).values('session_id').distinct().count()
-            data.append({'hour': stat['hour'].hour, 'count': stat['count'], 'unique_users': unique_users_count})
+                created_at__date=selected_date,
+                user__isnull=False
+            ).values('user').distinct().count()
+
+            unique_guests_count = TrafficStat.objects.filter(
+                created_at__hour=stat['hour'].hour,
+                created_at__date=selected_date,
+                user_id__isnull=True
+            ).values('ip_address').distinct().count()
+
+            data.append({
+                'hour': stat['hour'].hour,
+                'count': stat['count'],
+                'unique_registered_users': unique_registered_users,
+                'unique_guests': unique_guests_count
+            })
 
         return Response(data, status=status.HTTP_200_OK)
 
@@ -124,10 +137,23 @@ class WeeklyTrafficStats(generics.ListAPIView):
 
         data = []
         for stat in queryset:
-            unique_users_count = TrafficStat.objects.filter(
-                created_at__date=stat['day']
-            ).values('session_id').distinct().count()
-            data.append({'day': stat['day'].strftime('%A'), 'count': stat['count'], 'unique_users': unique_users_count})
+            unique_registered_users = TrafficStat.objects.filter(
+                created_at__date=stat['day'],
+                user__isnull=False
+            ).values('user').distinct().count()
+
+            unique_guests_count = TrafficStat.objects.filter(
+                created_at__date=stat['day'],
+                user_id__isnull=True
+            ).values('ip_address').distinct().count()
+
+            data.append({
+                'day': stat['day'].strftime('%A'),
+                'count': stat['count'],
+                'unique_registered_users': unique_registered_users,
+                'unique_guests': unique_guests_count
+            })
+
         return Response(data, status=status.HTTP_200_OK)
 
 
@@ -175,10 +201,22 @@ class MonthlyTrafficStats(generics.ListAPIView):
 
         data = []
         for stat in queryset:
-            unique_users_count = TrafficStat.objects.filter(
-                created_at__date=stat['day']
-            ).values('session_id').distinct().count()
-            data.append({'day': stat['day'].strftime('%d'), 'count': stat['count'], 'unique_users': unique_users_count})
+            unique_registered_users = TrafficStat.objects.filter(
+                created_at__month=stat['day'].month,
+                user__isnull=False
+            ).values('user').distinct().count()
+
+            unique_guests_count = TrafficStat.objects.filter(
+                created_at__month=stat['day'].month,
+                user_id__isnull=True
+            ).values('ip_address').distinct().count()
+
+            data.append({
+                'month': stat['day'].strftime('%B'),
+                'count': stat['count'],
+                'unique_registered_users': unique_registered_users,
+                'unique_guests': unique_guests_count
+            })
 
         return Response(data, status=status.HTTP_200_OK)
 
@@ -226,11 +264,22 @@ class YearlyTrafficStats(generics.ListAPIView):
 
         data = []
         for stat in queryset:
-            unique_users_count = TrafficStat.objects.filter(
-                created_at__month=stat['month'].month
-            ).values('session_id').distinct().count()
-            data.append(
-                {'month': stat['month'].strftime('%B'), 'count': stat['count'], 'unique_users': unique_users_count})
+            unique_registered_users = TrafficStat.objects.filter(
+                created_at__month=stat['month'].month,
+                user__isnull=False
+            ).values('user').distinct().count()
+
+            unique_guests_count = TrafficStat.objects.filter(
+                created_at__month=stat['month'].month,
+                user_id__isnull=True
+            ).values('ip_address').distinct().count()
+
+            data.append({
+                'month': stat['month'].strftime('%B'),
+                'count': stat['count'],
+                'unique_registered_users': unique_registered_users,
+                'unique_guests': unique_guests_count
+            })
 
         return Response(data, status=status.HTTP_200_OK)
 

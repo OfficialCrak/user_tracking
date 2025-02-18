@@ -1,9 +1,17 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
 
 class TrafficStat(models.Model):
     ip_address = models.GenericIPAddressField()
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='traffic_stats'
+    )
     user_agent = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField(default=timezone.now)
     url = models.CharField(max_length=255, blank=True, null=True)

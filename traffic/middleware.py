@@ -1,4 +1,5 @@
 from .models import TrafficStat
+from django.contrib.auth.models import AnonymousUser
 
 
 class TrafficTrackingMiddleware:
@@ -22,8 +23,11 @@ class TrafficTrackingMiddleware:
         session_id = request.session.session_key
         response = self.get_response(request)
 
+        user = request.user if not isinstance(request.user, AnonymousUser) else None
+
         TrafficStat.objects.create(
             ip_address=request.META.get('REMOTE_ADDR'),
+            user=user,
             user_agent=request.META.get('HTTP_USER_AGENT', ''),
             url=request.path,
             session_id=session_id,

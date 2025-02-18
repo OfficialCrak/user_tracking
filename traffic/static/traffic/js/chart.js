@@ -174,11 +174,15 @@ document.addEventListener("DOMContentLoaded", function () {
         let labels = [];
         let totalRequests = [];
         let uniqueUsers = [];
+        let uniqueGuests = [];
+        let uniqueRegisteredUsers = [];
 
         data.forEach(stat => {
             labels.push(stat.hour || stat.day || stat.month);
             totalRequests.push(stat.count);
-            uniqueUsers.push(stat.unique_users);
+            uniqueRegisteredUsers.push(stat.unique_registered_users);
+            uniqueGuests.push(stat.unique_guests);
+            uniqueUsers.push(stat.unique_registered_users + stat.unique_guests);
         });
 
         if (trafficChart) {
@@ -211,7 +215,27 @@ document.addEventListener("DOMContentLoaded", function () {
                 scales: {
                     x: {title: {display: true, text: getXAxisTitle(period)}},
                     y: {title: {display: true, text: "Количество"}}
+                },
+                plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(tooltipItem) {
+                            let datasetLabel = tooltipItem.dataset.label || '';
+                            let idx = tooltipItem.dataIndex;
+
+                            if (datasetLabel === "Всего запросов"){
+                                return `${datasetLabel}: ${totalRequests[idx]}`;
+                            } else if (datasetLabel === "Уникальные пользователи") {
+                                let totalUniqueUsers = uniqueUsers[idx];
+                                let uniqueRegistered = uniqueRegisteredUsers[idx];
+                                let uniqueGuest = uniqueGuests[idx];
+
+                                return `Уникальные пользователи: ${totalUniqueUsers} (зарегистрированные: ${uniqueRegistered}, гости: ${uniqueGuest})`;
+                            }
+                        }
+                    }
                 }
+            }
             }
         });
     }
