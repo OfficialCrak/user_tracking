@@ -7,15 +7,14 @@ class TrafficTrackingMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        if request.path.startswith('/static/'):
-            return self.get_response(request)
+        if request.path.startswith('/static/') or \
+                request.path.startswith('/admin/jsi18n/') or \
+                request.path.startswith('/admin/js/') or \
+                request.path.startswith('/admin/img/') or \
+                request.path.startswith('/admin/css/') or \
+                request.path == '/favicon.ico':
 
-        if request.path.startswith('/admin/jsi18n/'):
             return self.get_response(request)
-
-        if request.path.startswith('/admin/'):
-            if request.path.startswith('/admin/js/') or request.path.startswith('/admin/img/') or request.path.startswith('/admin/css/'):
-                return self.get_response(request)
 
         if not request.session.session_key:
             request.session.create()

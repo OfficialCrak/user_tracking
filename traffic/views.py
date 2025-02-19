@@ -1,7 +1,8 @@
+import locale
 from collections import OrderedDict
 from django.contrib.auth import get_user_model
 from django.shortcuts import render
-from django.utils.timezone import now
+from django.utils.timezone import now, localtime
 from django.views.generic import TemplateView
 from rest_framework import generics
 from rest_framework.views import APIView
@@ -11,7 +12,7 @@ from tracking.models import Visitor
 from .serializers import TrafficStatSerializer
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import Count, Max, F
+from django.db.models import Count, Max, F, Avg
 from django.utils import timezone
 from django.db.models.functions import TruncDay, TruncMonth, TruncHour
 from datetime import datetime, timedelta, date
@@ -54,7 +55,8 @@ class DailyTrafficStats(generics.ListAPIView):
         end_of_day = timezone.make_aware(datetime.combine(selected_date, datetime.max.time()))
 
         queryset = TrafficStat.objects.filter(created_at__range=(start_of_day, end_of_day))
-        queryset = queryset.annotate(hour=TruncHour('created_at')).values('hour').annotate(count=Count('id')).order_by('hour')
+        queryset = queryset.annotate(hour=TruncHour('created_at')).values('hour').annotate(count=Count('id')).order_by(
+            'hour')
 
         if not queryset.exists():
             return Response(
@@ -108,7 +110,8 @@ class WeeklyTrafficStats(generics.ListAPIView):
             try:
                 year, week = map(int, week_str.split('-'))
                 selected_date = date.fromisocalendar(year, week, 1)
-                start_of_week = timezone.make_aware(datetime.combine(selected_date, datetime.min.time()), timezone.get_current_timezone())
+                start_of_week = timezone.make_aware(datetime.combine(selected_date, datetime.min.time()),
+                                                    timezone.get_current_timezone())
 
             except ValueError:
                 return Response(
@@ -121,13 +124,16 @@ class WeeklyTrafficStats(generics.ListAPIView):
             iso_year, iso_week, iso_weekday = now.isocalendar()
 
             start_of_week = now - timezone.timedelta(days=iso_weekday - 1)
-            start_of_week = timezone.make_aware(datetime.combine(start_of_week.date(), datetime.min.time()), timezone.get_current_timezone())
+            start_of_week = timezone.make_aware(datetime.combine(start_of_week.date(), datetime.min.time()),
+                                                timezone.get_current_timezone())
 
         end_of_week = start_of_week + timezone.timedelta(days=6, hours=23, minutes=59, seconds=59)
-        end_of_week = timezone.make_aware(datetime.combine(end_of_week.date(), datetime.max.time()), timezone.get_current_timezone())
+        end_of_week = timezone.make_aware(datetime.combine(end_of_week.date(), datetime.max.time()),
+                                          timezone.get_current_timezone())
 
         queryset = TrafficStat.objects.filter(created_at__range=(start_of_week, end_of_week))
-        queryset = queryset.annotate(day=TruncDay('created_at')).values('day').annotate(count=Count('id')).order_by('day')
+        queryset = queryset.annotate(day=TruncDay('created_at')).values('day').annotate(count=Count('id')).order_by(
+            'day')
 
         if not queryset.exists():
             return Response(
@@ -148,7 +154,7 @@ class WeeklyTrafficStats(generics.ListAPIView):
             ).values('ip_address').distinct().count()
 
             data.append({
-                'day': stat['day'].strftime('%A'),
+                'day': stat['day'].strftime('%A, %d %B'),
                 'count': stat['count'],
                 'unique_registered_users': unique_registered_users,
                 'unique_guests': unique_guests_count
@@ -191,7 +197,8 @@ class MonthlyTrafficStats(generics.ListAPIView):
         end_of_month = timezone.make_aware(datetime(next_month.year, next_month.month, 1) - timezone.timedelta(days=1))
 
         queryset = TrafficStat.objects.filter(created_at__range=(start_of_month, end_of_month))
-        queryset = queryset.annotate(day=TruncDay('created_at')).values('day').annotate(count=Count('id')).order_by('day')
+        queryset = queryset.annotate(day=TruncDay('created_at')).values('day').annotate(count=Count('id')).order_by(
+            'day')
 
         if not queryset.exists():
             return Response(
@@ -213,6 +220,7 @@ class MonthlyTrafficStats(generics.ListAPIView):
 
             data.append({
                 'month': stat['day'].strftime('%B'),
+                'day': stat['day'].strftime('%d %B %Y'),
                 'count': stat['count'],
                 'unique_registered_users': unique_registered_users,
                 'unique_guests': unique_guests_count
@@ -254,7 +262,8 @@ class YearlyTrafficStats(generics.ListAPIView):
         end_of_year = timezone.make_aware(datetime(selected_year.year, 12, 31, 23, 59, 59))
 
         queryset = TrafficStat.objects.filter(created_at__range=(start_of_year, end_of_year))
-        queryset = queryset.annotate(month=TruncMonth('created_at')).values('month').annotate(count=Count('id')).order_by('month')
+        queryset = queryset.annotate(month=TruncMonth('created_at')).values('month').annotate(
+            count=Count('id')).order_by('month')
 
         if not queryset.exists():
             return Response(
@@ -335,64 +344,95 @@ class ActivityTrackingView(generics.CreateAPIView):
         )
 
 
-class ActiveUsersView(APIView):
-    def get(self, request, *args, **kwargs):
-        thirty_minutes_ago = timezone.now() - timezone.timedelta(minutes=30)
+'''
+Функция для облегчения ActiveUsersView и работы с context в html
+'''
 
-        active_sessions = (
-            TrafficStat.objects
-            .filter(created_at__gte=thirty_minutes_ago)
-            .values('session_id')
-            .annotate(last_active=Max('created_at'))
+
+def get_active_and_registered_users():
+    five_minutes_ago = now() - timedelta(minutes=5)
+
+    all_users = User.objects.all()
+
+    last_sessions = (
+        Visitor.objects
+        .filter(user__isnull=False)
+        .values('user_id')
+        .annotate(
+            last_start_time=Max('start_time'),
+            visit_count=Count('session_key'),
+            avg_time_on_site=Avg('time_on_site')
+        )
+    )
+    user_sessions = {s['user_id']: s for s in last_sessions}
+
+    active_sessions = (
+        TrafficStat.objects
+        .filter(created_at__gte=five_minutes_ago)
+        .values('session_id')
+        .annotate(last_active=Max('created_at'))
+    )
+
+    active_users_data = {}
+    for session in active_sessions:
+        visitor = Visitor.objects.filter(session_key=session['session_id']).select_related('user').first()
+        if not visitor or not visitor.user:
+            continue
+
+        if visitor.session_ended() or visitor.session_expired():
+            continue
+
+        user = visitor.user
+        time_on_site_seconds = visitor.time_on_site
+        time_on_site = f"{time_on_site_seconds // 3600:02}:{(time_on_site_seconds % 3600) // 60:02}:{time_on_site_seconds % 60:02}"
+
+        last_active_time = session['last_active']
+        is_online = last_active_time >= five_minutes_ago
+
+        active_users_data[user.id] = {
+            'is_online': is_online,
+            'time_on_site': time_on_site
+        }
+
+    registered_users = []
+    for user in all_users:
+        session_data = user_sessions.get(user.id, {})
+        visit_count = session_data.get('visit_count', 0)
+        avg_time_on_site_seconds = session_data.get('avg_time_on_site', 0)
+
+        avg_time_on_site = (
+            f"{int(avg_time_on_site_seconds) // 3600:02}:{(int(avg_time_on_site_seconds) % 3600) // 60:02}:{int(avg_time_on_site_seconds) % 60:02}"
+            if avg_time_on_site_seconds else "00:00:00"
         )
 
-        data = []
-        for session in active_sessions:
-            visitor = Visitor.objects.filter(session_key=session['session_id']).select_related('user').first()
+        start_time_local = timezone.localtime(session_data.get('last_start_time', None))
+        start_time_str = start_time_local.strftime('%d %B %Yг. %H:%M:%S')
 
-            if visitor:
-                if visitor.session_ended() or visitor.session_expired():
-                    continue
+        user_data = {
+            'id': user.id,
+            'username': user.username,
+            'full_name': user.get_full_name(),
+            'email': user.email,
+            'is_staff': user.is_staff,
+            'is_online': active_users_data.get(user.id, {}).get('is_online', False),
+            'time_on_site': active_users_data.get(user.id, {}).get('time_on_site', '-'),
+            'visit_count': visit_count,
+            'avg_time_on_site': avg_time_on_site,
+            'start_time': start_time_str
+        }
+        registered_users.append(user_data)
 
-                if visitor.user:
-                    user = visitor.user
+    registered_users.sort(key=lambda x: (x['is_online']), reverse=True)
 
-                    time_on_site_seconds = visitor.time_on_site
-                    hours = time_on_site_seconds // 3600
-                    minutes = (time_on_site_seconds % 3600) // 60
-                    seconds = time_on_site_seconds % 60
-                    time_on_site = f"{hours:02}:{minutes:02}:{seconds:02}"
+    return registered_users
 
-                    user_data = {
-                        'id': user.id,
-                        'username': user.username,
-                        'email': user.email,
-                        'is_staff': user.is_staff,
-                        'start_time': visitor.start_time,
-                        'time_on_site': time_on_site
-                    }
-                    user_data['start_time'] = timezone.localtime(visitor.start_time).strftime('%Y-%m-%dT%H:%M:%S.%f')
-                else:
-                    user_data = {
-                        'id': None,
-                        'username': 'Guest',
-                        'email': None,
-                        'is_staff': False
-                    }
 
-                last_active_time = timezone.localtime(session['last_active'])
-                if last_active_time < thirty_minutes_ago:
-                    user_data['is_online'] = False
-                else:
-                    user_data['is_online'] = True
+class ActiveUsersView(APIView):
+    def get(self, request, *args, **kwargs):
 
-                data.append({
-                    'session_id': session['session_id'],
-                    'last_active': last_active_time.strftime('%Y-%m-%dT%H:%M:%S.%f'),
-                    **user_data
-                })
+        data = get_active_and_registered_users()
 
-        return Response({'active_users': data}, status=status.HTTP_200_OK)
+        return Response({'registered_users': data}, status=status.HTTP_200_OK)
 
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -532,9 +572,12 @@ def index(request):
     visitor_stats = Visitor.objects.stats(start_date, end_date)
     user_stats = Visitor.objects.user_stats(start_date, end_date)
 
+    registered_users = get_active_and_registered_users()
+
     context = {
         "visitor_stats": visitor_stats,
         "user_stats": user_stats,
+        "registered_users": registered_users,
     }
 
     return render(request, 'traffic/index.html', context)
