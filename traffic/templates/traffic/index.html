@@ -15,7 +15,7 @@
             <thead class="table-dark">
                 <tr>
                     <th></th>
-                    <th>Всего</th>
+                    <th>Всего визитов</th>
                     <th>Уникальные</th>
                     <th>% Вернувшихся</th>
                     <th>Среднее время на сайте</th>
@@ -72,7 +72,7 @@
             <tbody>
                 {% for user in registered_users %}
                 <tr>
-                    <td class="table-info">{{ user.full_name }}</td>
+                    <td class="table-info"><a href="{% url 'user-requests' user.id %}">{{ user.full_name }}</a></td>
                     <td>{{ user.email }}</td>
                     <td>{{ user.start_time }}</td>
                     <td>

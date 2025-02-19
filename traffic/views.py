@@ -1,10 +1,14 @@
 import locale
 from collections import OrderedDict
 from django.contrib.auth import get_user_model
-from django.shortcuts import render
+from django.core.handlers.wsgi import WSGIRequest
+from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
+from django.http import HttpRequest
+from django.shortcuts import render, get_object_or_404
 from django.utils.timezone import now, localtime
 from django.views.generic import TemplateView
 from rest_framework import generics
+from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
 from .models import TrafficStat
@@ -440,6 +444,43 @@ class StandardResultsSetPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 100
 
+def filter_traffic_stats(request, user=None):
+    """
+    Функция фильтрации запросов по параметрам в запросе
+    Может быть использована как в API для swagger, так и для рендеринга страницы user_requests.html
+    """
+    queryset = TrafficStat.objects.all()
+
+    if user:
+        user_sessions = Visitor.objects.filter(user=user).values_list("session_key", flat=True)
+        queryset = queryset.filter(session_id__in=user_sessions).order_by('-created_at')
+
+    params = request.GET if hasattr(request, "GET") else request.query_params
+
+    start_date = params.get('start_date')
+    if start_date:
+        try:
+            start_date = timezone.datetime.fromisoformat(start_date)
+            start_date = timezone.make_aware(start_date)
+            queryset = queryset.filter(created_at__gte=start_date)
+        except ValueError:
+            raise ValidationError({"error": "Некорректный формат start_date"})
+
+    end_date = params.get('end_date')
+    if end_date:
+        try:
+            end_date = timezone.datetime.fromisoformat(end_date)
+            end_date = timezone.make_aware(end_date)
+            queryset = queryset.filter(created_at__lte=end_date)
+        except ValueError:
+            raise ValidationError({"error": "Некорректный формат end_date"})
+
+    url_filter = params.get("url")
+    if url_filter:
+        queryset = queryset.filter(url__icontains=url_filter)
+
+    return queryset
+
 
 class UserRequestLogView(generics.ListAPIView):
     serializer_class = TrafficStatSerializer
@@ -447,20 +488,6 @@ class UserRequestLogView(generics.ListAPIView):
 
     @swagger_auto_schema(
         manual_parameters=[
-            openapi.Parameter(
-                name='user_id',
-                in_=openapi.IN_QUERY,
-                description='ID пользователя (для авторизированных пользователей)',
-                type=openapi.TYPE_INTEGER,
-                required=False
-            ),
-            openapi.Parameter(
-                name='session_id',
-                in_=openapi.IN_QUERY,
-                description='Session id (для гостей)',
-                type=openapi.TYPE_STRING,
-                required=False
-            ),
             openapi.Parameter(
                 name='start_date',
                 in_=openapi.IN_QUERY,
@@ -480,74 +507,29 @@ class UserRequestLogView(generics.ListAPIView):
             openapi.Parameter(
                 name='url',
                 in_=openapi.IN_QUERY,
-                description='Фильтрация по url',
+                description='Фильтрация по URL',
                 type=openapi.TYPE_STRING,
                 required=False
             ),
         ]
     )
-    def get(self, request, *args, **kwargs):
-        user_id = request.query_params.get('user_id')
-        session_id = request.query_params.get('session_id')
-        start_date = request.query_params.get('start_date')
-        end_date = request.query_params.get('end_date')
-        url_filter = request.query_params.get("url")
 
-        if not user_id and not session_id:
+    def get_queryset(self):
+        user_id = self.kwargs.get('user_id')
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
             return Response(
-                {"error": "Необходимо указать user_id (для пользователей) или session_id (для гостей"},
+                {"error": "Данный пользователь не найден"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        queryset = TrafficStat.objects.all()
+        queryset = filter_traffic_stats(self.request, user)
+        return queryset
 
-        if user_id:
-            try:
-                user = User.objects.get(id=user_id)
-            except User.DoesNotExist:
-                return Response(
-                    {"error": "Пользователь не найден"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
 
-            user_sessions = Visitor.objects.filter(user=user).values_list("session_key", flat=True)
-            queryset = TrafficStat.objects.filter(session_id__in=user_sessions).order_by('-created_at')
-
-        elif session_id:
-            queryset = queryset.filter(session_id=session_id).order_by('-created_at')
-
-        if start_date:
-            try:
-                start_date = timezone.datetime.fromisoformat(start_date)
-                start_date = timezone.make_aware(start_date)
-                queryset = queryset.filter(created_at__gte=start_date)
-            except ValueError:
-                return Response(
-                    {"error": "Некорректный формат start_date"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-        if end_date:
-            try:
-                end_date = timezone.datetime.fromisoformat(end_date)
-                end_date = timezone.make_aware(end_date)
-
-                if start_date and end_date < start_date:
-                    return Response(
-                        {"error": "Конечная дата не может быть раньше начальной"},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-
-                queryset = queryset.filter(created_at__lte=end_date)
-            except ValueError:
-                return Response(
-                    {"error": "Некорректный формат end_date"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-        if url_filter:
-            queryset = queryset.filter(url__icontains=url_filter)
-
+    def get(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
         paginator = self.pagination_class()
         paginated_queryset = paginator.paginate_queryset(queryset, request)
         serializer = TrafficStatSerializer(paginated_queryset, many=True)
@@ -562,7 +544,7 @@ class UserRequestLogView(generics.ListAPIView):
             ("results", serializer.data),
         ])
 
-        return Response(response_data)
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 def index(request):
@@ -585,3 +567,32 @@ def index(request):
 
 class StatsView(TemplateView):
     template_name = "traffic/stats.html"
+
+
+def user_requests(request, user_id):
+    user = get_object_or_404(User, id=user_id)
+
+    queryset = filter_traffic_stats(request, user)
+
+    page_number = request.GET.get('page', 1)
+    paginator = Paginator(queryset, StandardResultsSetPagination.page_size)
+
+    try:
+        page_obj = paginator.page(page_number)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages)
+
+    context = {
+        "user": user,
+        "logs": page_obj.object_list,
+        "start_date": request.GET.get('start_date'),
+        "end_date": request.GET.get('end_date'),
+        "url_filter": request.GET.get('url'),
+        "total_pages": paginator.num_pages,
+        "current_page": page_obj.number,
+    }
+
+    return render(request, 'traffic/user_requests.html', context)
+
