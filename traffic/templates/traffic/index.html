@@ -54,6 +54,7 @@
 
     <!-- Статистика зарегистрированных пользователей -->
     <h2 class="text-center mt-4">Зарегистрированные пользователи</h2>
+    <p class="text-center">Сейчас онлайн: <strong>{{ online_users_count }}</strong></p>
     {% if registered_users %}
     <div class="table-responsive">
         <table class="table table-bordered table-hover">
@@ -65,7 +66,7 @@
                     <th>Онлайн</th>
                     <th>Время на сайте</th>
                     <th>Staff</th>
-                    <th>Количество визитов</th>
+                    <th>Визитов за 7 дней</th>
                     <th>Среднее время на сайте</th>
                 </tr>
             </thead>

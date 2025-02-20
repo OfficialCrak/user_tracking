@@ -356,19 +356,15 @@ class ActivityTrackingView(generics.CreateAPIView):
 def get_active_and_registered_users():
     five_minutes_ago = now() - timedelta(minutes=5)
 
+    start_date = now() - timedelta(days=7)
+    end_date = now()
+
     all_users = User.objects.all()
 
-    last_sessions = (
-        Visitor.objects
-        .filter(user__isnull=False)
-        .values('user_id')
-        .annotate(
-            last_start_time=Max('start_time'),
-            visit_count=Count('session_key'),
-            avg_time_on_site=Avg('time_on_site')
-        )
-    )
-    user_sessions = {s['user_id']: s for s in last_sessions}
+    user_stats = Visitor.objects.user_stats(start_date, end_date)
+    user_sessions = {user.id: {'visit_count': user.visit_count,
+                               'avg_time_on_site': user.time_on_site
+                               } for user in user_stats}
 
     active_sessions = (
         TrafficStat.objects
@@ -402,7 +398,9 @@ def get_active_and_registered_users():
     for user in all_users:
         session_data = user_sessions.get(user.id, {})
         visit_count = session_data.get('visit_count', 0)
-        avg_time_on_site_seconds = session_data.get('avg_time_on_site', 0)
+        avg_time_on_site_seconds = session_data.get('avg_time_on_site', timedelta(0))
+        if isinstance(avg_time_on_site_seconds, timedelta):
+            avg_time_on_site_seconds = avg_time_on_site_seconds.total_seconds()
 
         avg_time_on_site = (
             f"{int(avg_time_on_site_seconds) // 3600:02}:{(int(avg_time_on_site_seconds) % 3600) // 60:02}:{int(avg_time_on_site_seconds) % 60:02}"
@@ -435,8 +433,9 @@ class ActiveUsersView(APIView):
     def get(self, request, *args, **kwargs):
 
         data = get_active_and_registered_users()
+        online_users_count = sum(1 for user in data if user['is_online'])
 
-        return Response({'registered_users': data}, status=status.HTTP_200_OK)
+        return Response({'registered_users': data, 'online_users_count': online_users_count}, status=status.HTTP_200_OK)
 
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -555,11 +554,13 @@ def index(request):
     user_stats = Visitor.objects.user_stats(start_date, end_date)
 
     registered_users = get_active_and_registered_users()
+    online_users_count = sum(1 for user in registered_users if user['is_online'])
 
     context = {
         "visitor_stats": visitor_stats,
         "user_stats": user_stats,
         "registered_users": registered_users,
+        "online_users_count": online_users_count,
     }
 
     return render(request, 'traffic/index.html', context)
