@@ -1,3 +1,4 @@
+from calendar import monthrange
 from collections import OrderedDict
 from babel.dates import format_date
 from django.contrib.auth import get_user_model
@@ -14,7 +15,7 @@ from tracking.models import Visitor
 from .serializers import TrafficStatSerializer
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import Count, Max, F, Avg
+from django.db.models import Count, Max, F, Avg, Sum
 from django.utils import timezone
 from babel import Locale
 from django.db.models.functions import TruncDay, TruncMonth, TruncHour
@@ -68,24 +69,24 @@ class DailyTrafficStats(generics.ListAPIView):
             )
 
         data = []
+        all_hours = {hour: {"count": 0, "unique_registered_users": 0, "unique_guests": 0} for hour in range(24)}
         for stat in queryset:
-            unique_registered_users = TrafficStat.objects.filter(
-                created_at__hour=stat['hour'].hour,
-                created_at__date=selected_date,
-                user__isnull=False
-            ).values('user').distinct().count()
+            all_hours[stat['hour'].hour] = {
+                "count": stat['count'],
+                "unique_registered_users": TrafficStat.objects.filter(
+                    created_at__hour=stat['hour'].hour, created_at__date=selected_date, user__isnull=False
+                ).values('user').distinct().count(),
+                "unique_guests": TrafficStat.objects.filter(
+                    created_at__hour=stat['hour'].hour, created_at__date=selected_date, user_id__isnull=True
+                ).values('ip_address').distinct().count(),
+            }
 
-            unique_guests_count = TrafficStat.objects.filter(
-                created_at__hour=stat['hour'].hour,
-                created_at__date=selected_date,
-                user_id__isnull=True
-            ).values('ip_address').distinct().count()
-
+        for hour, values in all_hours.items():
             data.append({
-                'hour': stat['hour'].hour,
-                'count': stat['count'],
-                'unique_registered_users': unique_registered_users,
-                'unique_guests': unique_guests_count
+                'hour': hour,
+                'count': values["count"],
+                'unique_registered_users': values["unique_registered_users"],
+                'unique_guests': values["unique_guests"]
             })
 
         return Response(data, status=status.HTTP_200_OK)
@@ -135,8 +136,7 @@ class WeeklyTrafficStats(generics.ListAPIView):
                                           timezone.get_current_timezone())
 
         queryset = TrafficStat.objects.filter(created_at__range=(start_of_week, end_of_week))
-        queryset = queryset.annotate(day=TruncDay('created_at')).values('day').annotate(count=Count('id')).order_by(
-            'day')
+        queryset = queryset.annotate(day=TruncDay('created_at')).values('day').annotate(count=Count('id')).order_by('day')
 
         if not queryset.exists():
             return Response(
@@ -144,28 +144,33 @@ class WeeklyTrafficStats(generics.ListAPIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        data = []
-        for stat in queryset:
-            unique_registered_users = TrafficStat.objects.filter(
-                created_at__date=stat['day'],
-                user__isnull=False
-            ).values('user').distinct().count()
+        all_days = {
+            (start_of_week + timedelta(days=i)).date(): {
+                "count": 0,
+                "unique_registered_users": 0,
+                "unique_guests": 0
+            } for i in range(7)
+        }
 
-            unique_guests_count = TrafficStat.objects.filter(
-                created_at__date=stat['day'],
-                user_id__isnull=True
+        for stat in queryset:
+            stat_date = stat['day'].date()
+            all_days[stat_date]["count"] = stat['count']
+            all_days[stat_date]["unique_registered_users"] = TrafficStat.objects.filter(
+                created_at__date=stat_date, user__isnull=False
+            ).values('user').distinct().count()
+            all_days[stat_date]["unique_guests"] = TrafficStat.objects.filter(
+                created_at__date=stat_date, user_id__isnull=True
             ).values('ip_address').distinct().count()
 
-            locale = Locale('ru', 'RU')
-            day = format_date(stat['day'], format='long', locale=locale)
-            day_of_week = format_date(stat['day'], format='EEEE', locale=locale)
-
+        data = []
+        locale = Locale('ru', 'RU')
+        for day, values in all_days.items():
             data.append({
-                'day': day,
-                'day_of_week': day_of_week,
-                'count': stat['count'],
-                'unique_registered_users': unique_registered_users,
-                'unique_guests': unique_guests_count
+                "day": format_date(day, format='long', locale=locale),
+                "day_of_week": format_date(day, format='EEEE', locale=locale),
+                "count": values["count"],
+                "unique_registered_users": values["unique_registered_users"],
+                "unique_guests": values["unique_guests"]
             })
 
         return Response(data, status=status.HTTP_200_OK)
@@ -201,6 +206,7 @@ class MonthlyTrafficStats(generics.ListAPIView):
             selected_month = timezone.now()
 
         start_of_month = timezone.make_aware(datetime(selected_month.year, selected_month.month, 1))
+        days_in_month = monthrange(selected_month.year, selected_month.month)[1]
         next_month = selected_month.replace(month=(selected_month.month % 12) + 1)
         end_of_month = timezone.make_aware(datetime(next_month.year, next_month.month, 1) - timezone.timedelta(days=1))
 
@@ -214,28 +220,32 @@ class MonthlyTrafficStats(generics.ListAPIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        data = []
-        for stat in queryset:
-            unique_registered_users = TrafficStat.objects.filter(
-                created_at__month=stat['day'].month,
-                user__isnull=False
-            ).values('user').distinct().count()
+        all_days = {
+            (start_of_month + timedelta(days=i)).date(): {
+                "count": 0,
+                "unique_registered_users": 0,
+                "unique_guests": 0
+            } for i in range(days_in_month)
+        }
 
-            unique_guests_count = TrafficStat.objects.filter(
-                created_at__month=stat['day'].month,
-                user_id__isnull=True
+        for stat in queryset:
+            stat_date = stat['day'].date()
+            all_days[stat_date]["count"] = stat['count']
+            all_days[stat_date]["unique_registered_users"] = TrafficStat.objects.filter(
+                created_at__date=stat_date, user__isnull=False
+            ).values('user').distinct().count()
+            all_days[stat_date]["unique_guests"] = TrafficStat.objects.filter(
+                created_at__date=stat_date, user_id__isnull=True
             ).values('ip_address').distinct().count()
 
-            locale = Locale('ru', 'RU')
-            month = format_date(stat['day'], format='MMMM', locale=locale)
-            day = format_date(stat['day'], format='long', locale=locale)
-
+        data = []
+        locale = Locale('ru', 'RU')
+        for day, values in all_days.items():
             data.append({
-                'month': month,
-                'day': day,
-                'count': stat['count'],
-                'unique_registered_users': unique_registered_users,
-                'unique_guests': unique_guests_count
+                "day": format_date(day, format='d MMMM', locale=locale),  # Пример: "3 февраля"
+                "count": values["count"],
+                "unique_registered_users": values["unique_registered_users"],
+                "unique_guests": values["unique_guests"]
             })
 
         return Response(data, status=status.HTTP_200_OK)
@@ -284,84 +294,49 @@ class YearlyTrafficStats(generics.ListAPIView):
             )
 
         data = []
+
+        all_months = [
+            {"month": 1, "month_name": "январь", "count": 0, "unique_registered_users": 0, "unique_guests": 0},
+            {"month": 2, "month_name": "февраль", "count": 0, "unique_registered_users": 0, "unique_guests": 0},
+            {"month": 3, "month_name": "март", "count": 0, "unique_registered_users": 0, "unique_guests": 0},
+            {"month": 4, "month_name": "апрель", "count": 0, "unique_registered_users": 0, "unique_guests": 0},
+            {"month": 5, "month_name": "май", "count": 0, "unique_registered_users": 0, "unique_guests": 0},
+            {"month": 6, "month_name": "июнь", "count": 0, "unique_registered_users": 0, "unique_guests": 0},
+            {"month": 7, "month_name": "июль", "count": 0, "unique_registered_users": 0, "unique_guests": 0},
+            {"month": 8, "month_name": "август", "count": 0, "unique_registered_users": 0, "unique_guests": 0},
+            {"month": 9, "month_name": "сентябрь", "count": 0, "unique_registered_users": 0, "unique_guests": 0},
+            {"month": 10, "month_name": "октябрь", "count": 0, "unique_registered_users": 0, "unique_guests": 0},
+            {"month": 11, "month_name": "ноябрь", "count": 0, "unique_registered_users": 0, "unique_guests": 0},
+            {"month": 12, "month_name": "декабрь", "count": 0, "unique_registered_users": 0, "unique_guests": 0},
+        ]
+
         for stat in queryset:
-            unique_registered_users = TrafficStat.objects.filter(
-                created_at__month=stat['month'].month,
-                user__isnull=False
-            ).values('user').distinct().count()
+            month = stat['month'].month
+            month_data = next((item for item in all_months if item["month"] == month), None)
 
-            unique_guests_count = TrafficStat.objects.filter(
-                created_at__month=stat['month'].month,
-                user_id__isnull=True
-            ).values('ip_address').distinct().count()
+            if month_data:
+                unique_registered_users = TrafficStat.objects.filter(
+                    created_at__month=month,
+                    user__isnull=False
+                ).values('user').distinct().count()
 
-            locale = Locale('ru', 'RU')
-            month = format_date(stat['month'], format='MMMM', locale=locale)
+                unique_guests_count = TrafficStat.objects.filter(
+                    created_at__month=month,
+                    user_id__isnull=True
+                ).values('ip_address').distinct().count()
 
-            data.append({
-                'month': month,
-                'count': stat['count'],
-                'unique_registered_users': unique_registered_users,
-                'unique_guests': unique_guests_count
-            })
+                month_data['count'] = stat['count']
+                month_data['unique_registered_users'] = unique_registered_users
+                month_data['unique_guests'] = unique_guests_count
+
+        data = all_months
 
         return Response(data, status=status.HTTP_200_OK)
 
 
-class ActivityTrackingView(generics.CreateAPIView):
-    queryset = TrafficStat.objects.all()
-    serializer_class = TrafficStatSerializer
-
-    def create(self, request, *args, **kwargs):
-        last_activity_time = request.data.get('last_activity_time')
-
-        if not last_activity_time:
-            return Response(
-                {"error": "Отсутствует время последней активности"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            last_activity_time = timezone.datetime.fromisoformat(last_activity_time)
-            last_activity_time = timezone.make_aware(last_activity_time)
-        except ValueError:
-            return Response(
-                {"error": "Неверный формат времени"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if not request.session.session_key:
-            request.session.create()
-
-        session_id = request.session.session_key
-
-        visitor, created = Visitor.objects.get_or_create(
-            session_key=session_id,
-            defaults={
-                "ip_address": request.META.get('REMOTE_ADDR'),
-                "user_agent": request.META.get("HTTP_USER_AGENT", ""),
-                "start_time": timezone.now(),
-            }
-        )
-
-        TrafficStat.objects.create(
-            session_id=session_id,
-            event='activity',
-            created_at=last_activity_time,
-            ip_address=request.META.get('REMOTE_ADDR'),
-            user_agent=request.META.get("HTTP_USER_AGENT", ""),
-            url=request.path
-        )
-
-        return Response(
-            {"message": "Активность выполнена успешна"},
-            status=status.HTTP_201_CREATED
-        )
-
-
-'''
+"""
 Функция для облегчения ActiveUsersView и работы с context в html
-'''
+"""
 
 
 def get_active_and_registered_users():
@@ -430,7 +405,6 @@ def get_active_and_registered_users():
             'username': user.username,
             'full_name': user.get_full_name(),
             'email': user.email,
-            'is_staff': user.is_staff,
             'is_online': active_users_data.get(user.id, {}).get('is_online', False),
             'time_on_site': active_users_data.get(user.id, {}).get('time_on_site', '-'),
             'visit_count': visit_count,

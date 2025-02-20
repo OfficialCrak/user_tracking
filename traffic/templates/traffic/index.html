@@ -17,7 +17,6 @@
                     <th></th>
                     <th>Всего визитов</th>
                     <th>Уникальные</th>
-                    <th>% Вернувшихся</th>
                     <th>Среднее время на сайте</th>
                 </tr>
             </thead>
@@ -26,7 +25,6 @@
                     <th class="table-primary">Зарегистрированные</th>
                     <td>{{ visitor_stats.registered.total }}</td>
                     <td>{{ visitor_stats.registered.unique }}</td>
-                    <td>{{ visitor_stats.registered.return_ratio|floatformat }}%</td>
                     <td>{{ visitor_stats.registered.time_on_site|default_if_none:"н/д" }}</td>
                 </tr>
                 {% if visitor_stats.guests %}
@@ -34,14 +32,12 @@
                     <th class="table-secondary">Гости</th>
                     <td>{{ visitor_stats.guests.total }}</td>
                     <td>{{ visitor_stats.guests.unique }}</td>
-                    <td>{{ visitor_stats.guests.return_ratio|floatformat }}%</td>
                     <td>{{ visitor_stats.guests.time_on_site|default_if_none:"н/д" }}</td>
                 </tr>
                 <tr>
                     <th class="table-success">Всего</th>
                     <td>{{ visitor_stats.total }}</td>
                     <td>{{ visitor_stats.unique }}</td>
-                    <td>{{ visitor_stats.return_ratio|floatformat }}%</td>
                     <td>{{ visitor_stats.time_on_site|default_if_none:"н/д" }}</td>
                 </tr>
                 {% endif %}
@@ -65,7 +61,6 @@
                     <th>Начало сессии</th>
                     <th>Онлайн</th>
                     <th>Время на сайте</th>
-                    <th>Staff</th>
                     <th>Визитов за 7 дней</th>
                     <th>Среднее время на сайте</th>
                 </tr>
@@ -88,13 +83,6 @@
                             {{ user.time_on_site }}
                         {% else %}
                             -
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if user.is_staff %}
-                            <span style="color: green;">✔</span>
-                        {% else %}
-                            <span style="color: red;">✘</span>
                         {% endif %}
                     </td>
                     <td>{{ user.visit_count }}</td>

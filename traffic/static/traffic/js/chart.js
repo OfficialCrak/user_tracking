@@ -165,6 +165,38 @@ document.addEventListener("DOMContentLoaded", function () {
         return url;
     }
 
+    function generateLabels(period, data){
+        let labels = [];
+
+        if (period === "day") {
+            labels = Array.from({length: 24}, (_, i) => i);
+        } else if (period === "week") {
+            labels = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
+        } else if (period === "month") {
+            let date = new Date();
+            let year = date.getFullYear();
+            let month = date.getMonth();
+
+            let daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            let locale = 'ru-RU';
+            labels = Array.from({ length: daysInMonth }, (_, i) =>
+                new Date(year, month, i + 1).toLocaleDateString(locale, { day: 'numeric', month: 'long' })
+            );
+        } else if (period === "year") {
+            return Array.from({ length: 12 }, (_, i) => i + 1);
+        }
+        return labels;
+    }
+
+    function getMonthName(monthNum) {
+    const months = [
+        "январь", "февраль", "март", "апрель", "май", "июнь",
+        "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"
+    ];
+    return months[monthNum - 1];
+}
+
     function updateChart(data, period){
         if (data.error) {
             showError(data.error);
@@ -177,16 +209,38 @@ document.addEventListener("DOMContentLoaded", function () {
         let uniqueGuests = [];
         let uniqueRegisteredUsers = [];
 
-        data.forEach(stat => {
-            if (period === "week"){
-                labels.push([stat.day, stat.day_of_week]);
-            } else {
-                labels.push(stat.hour || stat.day || stat.month);
+        let allLabels = generateLabels(period);
+
+        allLabels.forEach(label => {
+            let found = data.find(stat => {
+            if (period === "day") {
+                return stat.hour === label;
+            } else if (period === "week") {
+                return stat.day_of_week === label;
+            } else if (period === "month") {
+                return stat.day === label;
+            } else if (period === "year") {
+                return stat.month === label;
             }
-            totalRequests.push(stat.count);
-            uniqueRegisteredUsers.push(stat.unique_registered_users);
-            uniqueGuests.push(stat.unique_guests);
-            uniqueUsers.push(stat.unique_registered_users + stat.unique_guests);
+        });
+
+            if (found) {
+                totalRequests.push(found.count);
+                uniqueRegisteredUsers.push(found.unique_registered_users);
+                uniqueGuests.push(found.unique_guests);
+                uniqueUsers.push(found.unique_registered_users + found.unique_guests);
+            } else {
+                totalRequests.push(0);
+                uniqueRegisteredUsers.push(0);
+                uniqueGuests.push(0);
+                uniqueUsers.push(0);
+            }
+
+            if (period === "year") {
+                labels.push(getMonthName(label));
+            } else {
+                labels.push(label);
+            }
         });
 
         if (trafficChart) {
