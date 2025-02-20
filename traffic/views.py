@@ -1,9 +1,7 @@
-import locale
 from collections import OrderedDict
+from babel.dates import format_date
 from django.contrib.auth import get_user_model
-from django.core.handlers.wsgi import WSGIRequest
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
-from django.http import HttpRequest
 from django.shortcuts import render, get_object_or_404
 from django.utils.timezone import now, localtime
 from django.views.generic import TemplateView
@@ -18,6 +16,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Count, Max, F, Avg
 from django.utils import timezone
+from babel import Locale
 from django.db.models.functions import TruncDay, TruncMonth, TruncHour
 from datetime import datetime, timedelta, date
 from drf_yasg.utils import swagger_auto_schema
@@ -157,8 +156,12 @@ class WeeklyTrafficStats(generics.ListAPIView):
                 user_id__isnull=True
             ).values('ip_address').distinct().count()
 
+            locale = Locale('ru', 'RU')
+            day = format_date(stat['day'], format='long', locale=locale)
+            day_of_week = format_date(stat['day'], format='EEEE', locale=locale)
+
             data.append({
-                'day': stat['day'].strftime('%A, %d %B'),
+                'day': f"{day} {day_of_week}",
                 'count': stat['count'],
                 'unique_registered_users': unique_registered_users,
                 'unique_guests': unique_guests_count
@@ -222,9 +225,13 @@ class MonthlyTrafficStats(generics.ListAPIView):
                 user_id__isnull=True
             ).values('ip_address').distinct().count()
 
+            locale = Locale('ru', 'RU')
+            month = format_date(stat['day'], format='MMMM', locale=locale)
+            day = format_date(stat['day'], format='long', locale=locale)
+
             data.append({
-                'month': stat['day'].strftime('%B'),
-                'day': stat['day'].strftime('%d %B %Y'),
+                'month': month,
+                'day': day,
                 'count': stat['count'],
                 'unique_registered_users': unique_registered_users,
                 'unique_guests': unique_guests_count
@@ -287,8 +294,11 @@ class YearlyTrafficStats(generics.ListAPIView):
                 user_id__isnull=True
             ).values('ip_address').distinct().count()
 
+            locale = Locale('ru', 'RU')
+            month = format_date(stat['month'], format='MMMM', locale=locale)
+
             data.append({
-                'month': stat['month'].strftime('%B'),
+                'month': month,
                 'count': stat['count'],
                 'unique_registered_users': unique_registered_users,
                 'unique_guests': unique_guests_count
@@ -407,8 +417,12 @@ def get_active_and_registered_users():
             if avg_time_on_site_seconds else "00:00:00"
         )
 
-        start_time_local = timezone.localtime(session_data.get('last_start_time', None))
-        start_time_str = start_time_local.strftime('%d %B %Yг. %H:%M:%S')
+        visitor = Visitor.objects.filter(user=user).order_by('-start_time').first()
+        if visitor:
+            start_time = visitor.start_time
+            start_time_local = timezone.localtime(start_time)
+        else:
+            start_time_local = "Неизвестно"
 
         user_data = {
             'id': user.id,
@@ -420,7 +434,7 @@ def get_active_and_registered_users():
             'time_on_site': active_users_data.get(user.id, {}).get('time_on_site', '-'),
             'visit_count': visit_count,
             'avg_time_on_site': avg_time_on_site,
-            'start_time': start_time_str
+            'start_time': start_time_local
         }
         registered_users.append(user_data)
 
@@ -442,6 +456,7 @@ class StandardResultsSetPagination(PageNumberPagination):
     page_size = 25
     page_size_query_param = 'page_size'
     max_page_size = 100
+
 
 def filter_traffic_stats(request, user=None):
     """
