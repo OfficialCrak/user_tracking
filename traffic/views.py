@@ -464,7 +464,7 @@ def filter_traffic_stats(request, user=None):
         except ValueError:
             raise ValidationError({"error": "Некорректный формат end_date"})
 
-    url_filter = params.get("url")
+    url_filter = params.get("url", '')
     if url_filter:
         queryset = queryset.filter(url__icontains=url_filter)
 
@@ -580,7 +580,7 @@ def user_requests(request, user_id):
         "logs": page_obj.object_list,
         "start_date": request.GET.get('start_date'),
         "end_date": request.GET.get('end_date'),
-        "url_filter": request.GET.get('url'),
+        "url_filter": request.GET.get('url', ''),
         "total_pages": paginator.num_pages,
         "current_page": page_obj.number,
     }
