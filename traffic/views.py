@@ -161,7 +161,8 @@ class WeeklyTrafficStats(generics.ListAPIView):
             day_of_week = format_date(stat['day'], format='EEEE', locale=locale)
 
             data.append({
-                'day': f"{day} {day_of_week}",
+                'day': day,
+                'day_of_week': day_of_week,
                 'count': stat['count'],
                 'unique_registered_users': unique_registered_users,
                 'unique_guests': unique_guests_count

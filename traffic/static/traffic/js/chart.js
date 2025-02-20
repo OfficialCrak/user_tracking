@@ -178,7 +178,11 @@ document.addEventListener("DOMContentLoaded", function () {
         let uniqueRegisteredUsers = [];
 
         data.forEach(stat => {
-            labels.push(stat.hour || stat.day || stat.month);
+            if (period === "week"){
+                labels.push([stat.day, stat.day_of_week]);
+            } else {
+                labels.push(stat.hour || stat.day || stat.month);
+            }
             totalRequests.push(stat.count);
             uniqueRegisteredUsers.push(stat.unique_registered_users);
             uniqueGuests.push(stat.unique_guests);
@@ -213,7 +217,12 @@ document.addEventListener("DOMContentLoaded", function () {
             options: {
                 responsive: true,
                 scales: {
-                    x: {title: {display: true, text: getXAxisTitle(period)}},
+                    x: {
+                        title: {
+                            display: true,
+                            text: getXAxisTitle(period)
+                        }
+                    },
                     y: {title: {display: true, text: "Количество"}}
                 },
                 plugins: {
